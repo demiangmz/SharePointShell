@@ -1,0 +1,85 @@
+<#
+Credit: http://sharepoint.jsturges.com/2012/09/add-column-to-default-view-using-powershell
+Author: Jason Sturges
+
+Add/Remove Column to/from Default View Using PowerShell
+Recently I had a request from a client to add a custom site collection column to all document libraries. This is pretty easy though the SharePoint UI of course, by creating a custom Site Column in the collection and adding it to the ‘Document’ content type.
+However, in doing this the column is not added to the default view for any document libraries. This can be easily done using PowerShell using the script below. This adds the column to the default view in every document library throughout the entire site collection (referenced here).
+#>
+
+$site = Get-SPSite "https://sharepoint.com"
+$addcolumn = "Document ID"
+$delcolumn = "Created"
+
+$site | Get-SPWeb -limit all | ForEach-Object {
+# Get all document libraries
+$lists = $_.Lists | where  {($_.BaseType -eq "DocumentLibrary") -and ($_.title -like "*Docs")}
+
+# Loop libraries
+for ($i = 0; $i -lt $lists.Count; $i++) {
+Try {# Get current view
+	$view = $lists[$i].DefaultView
+	if($view) { 
+	# Delete column
+	while($view.ViewFields.ToStringCollection().Contains($delcolumn)) {
+	$view.ViewFields.delete($delcolumn)
+	$view.Update()
+	}
+	# Add column
+	if(!($view.ViewFields.ToStringCollection().Contains($column))) {
+	$view.ViewFields.add($addcolumn)
+	$view.Update()
+	}
+	}
+}
+catch [Exception] {
+write-output (”  Error: ” + $_.Exception.ToString())
+}
+}
+}
+$site.Dispose()
+
+#You can also add views to a view by URL and view name for one specific view or list (a nice tip I found here). Here is another option by using GetViewFromUrl:
+$spWeb = Get-SPWeb -Identity "http://mySharePoint"
+$spView = $spWeb.GetViewFromUrl("/Lists/MyList/AllItems.aspx")
+$spField = $spList.Fields["MyField"]
+$spView.ViewFields.Add($spField)
+$spView.Update()
+
+You can also try to use SPList object as below:
+$spList = Get-SPList -Url "http://mySharePoint/Lists/MyList"
+$spView = $spList.Views["All Items"]
+$spField = $spList.Fields["MyField"]
+$spView.ViewFields.Add($spField)
+$spView.Update()
+
+#Adding multiple columns to a view can also be done with PowerShell, and even create a new view and set it as the default view. This is really awesome if you want to leave the default ‘All Items’ view intact, but create a new custom view and set it as default (found here):
+Add-PSSnapin Microsoft.SharePoint.PowerShell -erroraction SilentlyContinue
+$siteURL = "http://dev1share"
+ $site = Get-SPSite($siteURL)
+foreach($web in $site.AllWebs) {
+$listCounter = $web.Lists.Count
+ for($i=0;$i -le $listCounter;$i++) {
+    $list = $web.Lists[$i]
+     if($list.BaseType -eq "DocumentLibrary") {
+     $newList = $web.Lists.item($list.ID);
+     $viewfields = New-Object System.Collections.Specialized.StringCollection
+   $viewfields.Add("DocIcon")
+   $viewfields.Add("LinkFilename")
+   $viewfields.Add("_UIVersionString")
+   $viewfields.Add("Modified")
+   $viewfields.Add("Created")
+   $viewfields.Add("Editor")
+   $viewfields.Add("FileSizeDisplay")
+  [void]$newList.Views.Add("Detailed", $viewfields, "", 100, $true, $true)
+   $newList.Update();
+  $view=$newList.Views["Detailed"]
+   $view.DefaultView = $true
+   $view.Update()
+ }
+ }
+$web.Dispose();
+ }
+$site.Dispose();
+
+
