@@ -1,5 +1,5 @@
 # SharePointShell
-Useful scripts to manage SharePoint Online and SharePoint Server.
+Useful scripts to manage SharePoint Online and SharePoint Server. Some Office Web Apps scripts also if you need them.
 
 Microsoft Disclaimer
 
