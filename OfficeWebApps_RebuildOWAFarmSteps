@@ -1,0 +1,33 @@
+#Office Web Apps 2013 - Rebuild your Farm in a few Easy Steps!
+#Because there is minimal configuration overhead (from an Office Web Apps perspective) and zero data loss, there is little risk to rebuilding a farm.  These steps can be a legitimate part of an action plan for resolving technical issues with Office Web Apps. 
+
+#1. Take farm offline (if there is a load balancer)
+#2. Collect the current Farm information via Powershell (on WAC Server): 
+
+Get-OfficeWebAppsFarm > c:\MyWACfarm.txt
+	
+#3. (If multi-server farm) use Powershell (on WAC Servers) to remove each child machine from the farm, then remove the parent machine.  This will delete the farm.
+
+Remove-OfficeWebAppsMachine
+	
+#4. Reboot the Office Web Apps server(s).
+#5. Recreate the farm via Powershell (on WAC Server) using (if appropriate) the parameter values from "MyWACfarm.txt".
+
+New-OfficeWebAppsFarm -InternalURL "http://WACServer.corp.contoso.com" -AllowHttp -EditingEnabled -OpenFromURLEnabled
+
+#6. Reunite the children with their parent via Powershell (on WAC Server).  Run this from each child server: 
+
+New-OfficeWebAppsMachine -MachineToJoin <ParentServer>
+	
+#7. Bring farm back online.
+#Note: You may want to rebuild the bindings via SharePoint Powershell (on SharePoint Server):
+
+Remove-SPWOPIBinding –All:$true
+New-SPWOPIBinding –ServerName “WACServer.corp.contoso.com” -AllowHttp
+
+#Note: You need to replace values with the correct information from your farm.
+
+#Useful Resources:
+#Configure Office Web Apps for SharePoint 2013
+#http://technet.microsoft.com/en-us/library/ff431687
+#http://blogs.technet.com/b/office_web_apps_server_2013_support_blog/archive/2013/12/20/office-web-apps-2013-rebuild-your-farm-in-a-few-easy-steps.aspx
