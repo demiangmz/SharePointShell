@@ -1,0 +1,108 @@
+# Recreate Search Service Application and partition components between two servers.
+
+#1. Remove Existing Search Application and dependencies:
+ 
+$SSAS = Get-SPEnterpriseSearchServiceApplication
+ForEach ($SSA in $SSAS)  {
+$SSA | FT Name, ID, ApplicationPool
+Write-Host "Removing SSA" $SSA.Id -ForegroundColor Yellow
+$AllProxies = Get-SPEnterpriseSearchServiceApplicationProxy
+$Proxy = $AllProxies | ?{$_.GetSearchServiceApplicationInfo().SearchServiceApplicationID -eq $SSA.Id}
+Remove-SPEnterpriseSearchServiceApplicationProxy -Identity $Proxy -Confirm:$false -verbose
+Remove-SPEnterpriseSearchServiceApplication -Identity $SSA -RemoveData  -Confirm:$false -verbose
+ }
+
+#Stop Search Service Instances
+$SSIS = Get-SPEnterpriseSearchServiceInstance
+ForEach ($SSI in $SSIS) {
+$SSI 
+Write-Host "Stopping" $SSIS.Service "on" $SSIS.Server -ForegroundColor Yellow
+Stop-SPEnterpriseSearchServiceInstance -Identity $SSI -confirm:$false -verbose
+}
+ 
+#Stop Search Query and Site Settings Service Instances
+$SQSSSIS = Get-SPEnterpriseSearchQueryAndSiteSettingsServiceInstance
+ 
+ForEach ($SQSSSI in $SQSSSIS) {
+ $SQSSSI
+Write-Host "Stopping" $SQSSSI.Service "on" $SQSSSI.Server -ForegroundColor Yellow
+Stop-SPEnterpriseSearchQueryAndSiteSettingsServiceInstance -Identity $SQSsSI -confirm:$false -verbose
+}
+ 
+#Check Service Status
+Get-SPEnterpriseSearchServiceInstance | FT Server, Status
+Get-SPEnterpriseSearchQueryAndSiteSettingsServiceInstance | FT Server, Status
+
+#2. Recreate Search Service Application partitioned in 2 servers:
+
+$APP1 = "SP01"
+$APP2 = "SP02"
+$SearchAppPoolName = "SearchServiceAppPool"
+$SearchAppPoolAccountName = "DOMAIN\SPSearchService"
+$SearchServiceName = "Search Service Application"
+$SearchServiceProxyName = "Search Service Application Proxy"
+$DatabaseName = "SearchService"
+ 
+#Create a Search Service Application Pool
+$spAppPool = New-SPServiceApplicationPool -Name $SearchAppPoolName -Account $SearchAppPoolAccountName -Verbose
+ 
+#Start Search Service Instance on all Application Servers
+Start-SPEnterpriseSearchServiceInstance $App1 -ErrorAction SilentlyContinue
+Start-SPEnterpriseSearchServiceInstance $App2 -ErrorAction SilentlyContinue
+Start-SPEnterpriseSearchQueryAndSiteSettingsServiceInstance $App1 -ErrorAction SilentlyContinue
+Start-SPEnterpriseSearchQueryAndSiteSettingsServiceInstance $App2 -ErrorAction SilentlyContinue
+ 
+#Create Search Service Application
+$ServiceApplication = New-SPEnterpriseSearchServiceApplication -Partitioned -Name $SearchServiceName -ApplicationPool $spAppPool.Name -DatabaseName $DatabaseName
+ 
+#Create Search Service Proxy
+New-SPEnterpriseSearchServiceApplicationProxy -Partitioned -Name $SearchServiceProxyName -SearchApplication $ServiceApplication
+
+#We have just created the search service application. Now, we need to configure different search components as described above and then finalize the search topology. 
+#Let’s start with creation of the new search topology. For this, we first need to clone the existing active search topology:
+
+$ServiceApplication = Get-SPEnterpriseSearchServiceApplication
+
+$clone = $ServiceApplication.ActiveTopology.Clone()
+$App1SSI = Get-SPEnterpriseSearchServiceInstance -Identity $app1
+$App2SSI = Get-SPEnterpriseSearchServiceInstance -Identity $app2
+
+#Once we have the cloned topology, we can start creating the search components.
+#We create two admin components for HA:
+New-SPEnterpriseSearchAdminComponent –SearchTopology $clone -SearchServiceInstance $App1SSI
+New-SPEnterpriseSearchAdminComponent –SearchTopology $clone -SearchServiceInstance $App2SSI
+
+#We need two content processing components for HA
+New-SPEnterpriseSearchContentProcessingComponent –SearchTopology $clone -SearchServiceInstance $App1SSI
+New-SPEnterpriseSearchContentProcessingComponent –SearchTopology $clone -SearchServiceInstance $App2SSI
+ 
+#We need two analytics processing components for HA
+New-SPEnterpriseSearchAnalyticsProcessingComponent –SearchTopology $clone -SearchServiceInstance $App1SSI
+New-SPEnterpriseSearchAnalyticsProcessingComponent –SearchTopology $clone -SearchServiceInstance $App2SSI
+ 
+#We need two crawl components for HA
+New-SPEnterpriseSearchCrawlComponent –SearchTopology $clone -SearchServiceInstance $App1SSI
+New-SPEnterpriseSearchCrawlComponent –SearchTopology $clone -SearchServiceInstance $App2SSI
+ 
+#We need two query processing components for HA
+New-SPEnterpriseSearchQueryProcessingComponent –SearchTopology $clone -SearchServiceInstance $App1SSI
+New-SPEnterpriseSearchQueryProcessingComponent –SearchTopology $clone -SearchServiceInstance $App2SSI
+
+#As a best practice, we want to place the search index primary copy and replica at different locations on the application servers. 
+#The following commands define the locations for the primary and replica copies and then create the index components as required.
+
+#Set the primary and replica index location; ensure these drives and folders exist on application servers
+$IndexLocation ="F:\SearchIndex"
+
+#We need two index partitions and replicas for each partition. Follow the sequence.
+New-SPEnterpriseSearchIndexComponent –SearchTopology $clone -SearchServiceInstance $App1SSI -RootDirectory $IndexLocation -IndexPartition 0
+New-SPEnterpriseSearchIndexComponent –SearchTopology $clone -SearchServiceInstance $App2SSI -RootDirectory $IndexLocation -IndexPartition 0
+
+#Finally, we activate the cloned topology to bring the changes into effect.
+
+$clone.Activate()
+
+#This will take a while to finalize the changes. Once the re-configuration of search topology is complete, we can verify the same by running the following commands.
+
+$ssa = Get-SPEnterpriseSearchServiceApplication
+Get-SPEnterpriseSearchTopology -SearchApplication $ssa
