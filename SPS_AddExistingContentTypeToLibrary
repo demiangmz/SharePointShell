@@ -1,0 +1,36 @@
+#Add existing site content type to document library
+
+Add-PSSnapin Microsoft.SharePoint.PowerShell -erroraction SilentlyContinue
+
+$site = Get-SPSite “https://sharepoint.com"
+$ctToAdd = $site.RootWeb.ContentTypes["Link to a Document"]
+
+foreach($web in $site.AllWebs) {
+
+If ($web -like "*DevTeam*") {
+
+$listCounter = $web.Lists.Count
+
+for($i=0;$i -le $listCounter;$i++) {
+    
+$list = $web.Lists[$i]
+     
+if (($list.BaseType -eq "DocumentLibrary") -and ($list.title -like "Documents")) {
+
+   $list.ContentTypesEnabled = $true
+   $list.Update()
+	
+   #Add site content types to the list
+
+   $ct = $list.ContentTypes.Add($ctToAdd)
+
+   write-host "Content type" $ct.Name "added to list" $list.Title
+
+   $list.Update()
+   }
+  }
+ }
+}
+
+$web.Dispose()
+$site.Dispose()
