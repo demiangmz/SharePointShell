@@ -1,0 +1,13 @@
+#Update Office Web Apps Farm:
+#1. Backup the farm settings: 
+Get-OfficeWebAppsFarm > c:\MyWACfarm.txt
+	
+#2. Remove the server Farm:
+Remove-OfficeWebAppsMachine
+	
+#3. Install update. Reboot server.
+#4. Reconfigure Server Farm:
+New-OfficeWebAppsFarm -InternalUrl "https://officewebapps.com" -ExternalUrl "https://officewebapps.com" -CertificateName "2019" -LogLocation L:\Logs\ULS\ -LogRetentionInDays 90 -CacheLocation E:\ProgramData\Microsoft\OfficeWebApps\Working\d\ -CacheSizeInGB 25 -ClipartEnabled:$true -OpenFromURLEnabled:$true -ExcelWorkbookSizeMax 25 -EditingEnabled -MaxMemoryCacheSizeInMB 5120
+	
+#5. Test Farm. You should get a 200 HTTP status code response
+Invoke-WebRequest -URI https://officewebapps.com/hosting/discovery
