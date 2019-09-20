@@ -1,4 +1,5 @@
 #Add existing site content type to document library
+#Credit: http://sharepoint.stackexchange.com/questions/95123/add-existing-content-type-to-document-library
 
 Add-PSSnapin Microsoft.SharePoint.PowerShell -erroraction SilentlyContinue
 
